@@ -1,0 +1,97 @@
+---
+title: "Code"
+author: "Jonathan Rosenblatt"
+date: "5/16/2017"
+output: html_document
+---
+
+Notes:
+
+- We thank [Nicole Lazar](http://www.stat.uga.edu/people/faculty/nicole-lazar) for the initial code used for this simulation.
+
+
+
+
+```{r}
+n <- 2e3 #Sample size.
+nruns <- 1e4 # number of replications
+n.shifts <- 10 
+muvec <-seq(0,2, length=n.shifts) # shift size
+epsvec <- c(0.015, 0.04) # mixing weights
+sigma <- 0.2 # variance of active group
+alpha <- 0.05 # significance level
+```
+
+
+### Results: 
+```{r}
+library(doMC)
+library(foreach)
+
+registerDoMC(cores = detectCores()-2)
+
+# loop over mixing weights then over replications
+result <- foreach(epsind=1:2, .combine='rbind') %:% 
+  foreach(run=1:nruns, .combine='rbind') %dopar% {
+    # epsind <- 1
+    eps <- epsvec[epsind]
+    ind <- rbinom(n,1,eps) # generate group indicators
+    samp0 <- (1-ind) * rnorm(n,0,1) + ind*rnorm(n,0,sigma) # Base sample.
+    
+    # go over mu values
+    foreach(i=1:n.shifts, .combine ='rbind')%do%{ 
+      # i <- n.shifts
+      mu <- muvec[i]
+      samp <- samp0 + ind*mu # Adding on mu.
+      
+      wilcox.result <- wilcox.test(samp)
+      ttest.result <- t.test(samp)
+      
+      p1 <- unname(wilcox.result$p.value) # compute two-sided wilcoxon p-value
+      p2 <- unname(ttest.result$p.value) # compute the two-sided t-test p-value
+      
+      c(eps=eps, mu=mu, wilcox.pval=p1, t.pval=p2)
+    }
+  }
+```
+
+
+### Analyze results
+```{r}
+library(magrittr)
+library(dplyr)
+
+result.df <- as.data.frame(result)
+result.df %<>% mutate(w.reject.theory= as.numeric(wilcox.pval <= alpha),
+                   t.reject.theory= as.numeric(t.pval <= alpha))
+
+
+result.df.summary <- result.df %>%
+  group_by(mu,eps) %>%
+  summarize(w.power.theory= mean(w.reject.theory, na.rm = TRUE),
+            t.power.theory= mean(t.reject.theory, na.rm = TRUE))
+
+result.df.summary %<>% mutate(ratio.theory=w.power.theory/t.power.theory)
+```
+
+
+Plotting ratios:
+```{r}
+library(ggplot2)
+result.df.summary %>% ggplot(aes(x=mu, y=ratio.theory, color=factor(eps)))+
+                               geom_line()
+```
+
+Plotting power:
+```{r}
+plot.1 <- result.df.summary %>% 
+  ggplot(aes(x=mu))+
+  geom_line(aes(y=w.power.theory), linetype=1)+ 
+  geom_line(aes(y=t.power.theory), linetype=2)+ 
+  facet_grid(~eps)+
+  theme_bw(base_size = 20)+
+  ylab('Power')+
+  xlab(expression(mu))
+plot.1
+```
+
