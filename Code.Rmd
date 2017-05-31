@@ -17,7 +17,7 @@ n <- 2e3 #Sample size.
 nruns <- 1e4 # number of replications
 n.shifts <- 10 
 muvec <-seq(0,2, length=n.shifts) # shift size
-epsvec <- c(0.015, 0.04) # mixing weights
+epsvec <- c(0, 0.015, 0.04) # mixing weights
 sigma <- 0.2 # variance of active group
 alpha <- 0.05 # significance level
 ```
@@ -31,7 +31,7 @@ library(foreach)
 registerDoMC(cores = detectCores()-2)
 
 # loop over mixing weights then over replications
-result <- foreach(epsind=1:2, .combine='rbind') %:% 
+result <- foreach(epsind=1:length(epsvec), .combine='rbind') %:% 
   foreach(run=1:nruns, .combine='rbind') %dopar% {
     # epsind <- 1
     eps <- epsvec[epsind]
@@ -94,4 +94,3 @@ plot.1 <- result.df.summary %>%
   xlab(expression(mu))
 plot.1
 ```
-
